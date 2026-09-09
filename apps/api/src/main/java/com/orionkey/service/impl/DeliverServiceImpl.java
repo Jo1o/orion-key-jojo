@@ -8,6 +8,7 @@ import com.orionkey.exception.BusinessException;
 import com.orionkey.repository.*;
 import com.orionkey.service.DeliverService;
 import com.orionkey.service.EmailService;
+import com.orionkey.service.TghaoOrderService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -32,6 +33,7 @@ public class DeliverServiceImpl implements DeliverService {
     private final SiteConfigRepository siteConfigRepository;
     private final UnmatchedTransactionRepository unmatchedTransactionRepository;
     private final EmailService emailService;
+    private final TghaoOrderService tghaoOrderService;
 
     @Override
     @SuppressWarnings("unchecked")
@@ -140,20 +142,50 @@ public class DeliverServiceImpl implements DeliverService {
                 }
                 try {
                     List<CardKey> allAllocated = new ArrayList<>();
+
+                    // 检查是否需要 Tghao 代理下单
+                    boolean useTghaoProxy = false;
                     for (OrderItem item : items) {
-                        List<CardKey> keys = cardKeyRepository.findAndLockAvailable(
-                                item.getProductId(), item.getSpecId(), item.getQuantity());
-                        if (keys.size() < item.getQuantity()) {
-                            throw new BusinessException(ErrorCode.ORDER_OUT_OF_STOCK, "缺货补货中，请联系客服");
+                        // 尝试 Tghao 代理下单
+                        boolean tghaoSuccess = tghaoOrderService.processOrder(order, item.getProductId(), item.getQuantity());
+                        if (tghaoSuccess) {
+                            useTghaoProxy = true;
+                            log.info("Order {} item {} using Tghao proxy", orderId, item.getId());
+
+                            // 从 Tghao 获取卡密
+                            String secret = tghaoOrderService.queryOrderSecret(order.getTghaoTradeNo());
+                            if (secret != null && !secret.isEmpty()) {
+                                // 创建虚拟卡密记录
+                                CardKey virtualKey = new CardKey();
+                                virtualKey.setProductId(item.getProductId());
+                                virtualKey.setSpecId(item.getSpecId());
+                                virtualKey.setContent(secret);
+                                virtualKey.setStatus(CardKeyStatus.SOLD);
+                                virtualKey.setOrderId(orderId);
+                                virtualKey.setOrderItemId(item.getId());
+                                virtualKey.setSoldAt(LocalDateTime.now());
+                                cardKeyRepository.save(virtualKey);
+                                allAllocated.add(virtualKey);
+                            } else {
+                                log.warn("Tghao order {} returned empty secret, waiting for manual delivery",
+                                        order.getTghaoTradeNo());
+                            }
+                        } else {
+                            // 使用本地库存
+                            List<CardKey> keys = cardKeyRepository.findAndLockAvailable(
+                                    item.getProductId(), item.getSpecId(), item.getQuantity());
+                            if (keys.size() < item.getQuantity()) {
+                                throw new BusinessException(ErrorCode.ORDER_OUT_OF_STOCK, "缺货补货中，请联系客服");
+                            }
+                            for (CardKey key : keys) {
+                                key.setStatus(CardKeyStatus.SOLD);
+                                key.setOrderId(orderId);
+                                key.setOrderItemId(item.getId());
+                                key.setSoldAt(LocalDateTime.now());
+                                cardKeyRepository.save(key);
+                            }
+                            allAllocated.addAll(keys);
                         }
-                        for (CardKey key : keys) {
-                            key.setStatus(CardKeyStatus.SOLD);
-                            key.setOrderId(orderId);
-                            key.setOrderItemId(item.getId());
-                            key.setSoldAt(LocalDateTime.now());
-                            cardKeyRepository.save(key);
-                        }
-                        allAllocated.addAll(keys);
                     }
 
                     order.setStatus(OrderStatus.DELIVERED);

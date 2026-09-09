@@ -1,0 +1,39 @@
+Orion Key inspection fixture
+
+Changed branch/field: root package manifest copy, added `_audit_probe` only in MODIFIED_FILE.
+Source Git object hash preserved: package.json = 430725324c0e04b2373cff6790d0239249223bfb (SHA-1); current SHA-256 = DC04ADE2733E38657BE6FE701C93BCD12C41518FBC92544B4B4C77EFD46ACCB5.
+
+Artifacts:
+- .audit/MODIFIED_FILE
+- .audit/DIFF_FILE
+- .audit/VERIFICATION.txt
+- .audit/ROLLBACK.sh
+
+BASELINE
+Command: node -e "const fs=require('fs'); JSON.parse(fs.readFileSync('package.json','utf8')); console.log('BASELINE_OK')"
+Input: package.json
+Literal output: BASELINE_OK
+Exit status: 0
+Result: original manifest parses successfully.
+
+MODIFIED
+Command: node -e "const fs=require('fs'); const p='.audit/MODIFIED_FILE'; const x=JSON.parse(fs.readFileSync(p,'utf8')); console.log(x._audit_probe, Object.keys(x).length)"
+Input: .audit/MODIFIED_FILE
+Literal output: inspection-copy-only 5
+Exit status: 0
+Result: copy parses and retains the requested audit-only field.
+
+DIFF
+Command: git diff --no-index -- package.json .audit/MODIFIED_FILE
+Input: package.json and .audit/MODIFIED_FILE
+Literal result: difference is the `_audit_probe` field shown in .audit/DIFF_FILE.
+Exit status: 1 (expected because files differ).
+
+ROLLBACK
+Command: "C:\\Program Files\\Git\\bin\\bash.exe" -lc "./.audit/ROLLBACK.sh .audit/rollback-copy.json .audit/rollback-backup.json"
+Input: rollback-copy.json is a changed copy; rollback-backup.json is the baseline copy.
+Literal output: RESTORED .audit/rollback-copy.json FROM .audit/rollback-backup.json
+Exit status: 0
+Result: rollback-copy.json hash equals rollback-backup.json after rollback; MODIFIED_FILE remains changed.
+
+Working-tree status after verification: `## main...origin/main` plus `?? .audit/`; business source files remain unchanged.

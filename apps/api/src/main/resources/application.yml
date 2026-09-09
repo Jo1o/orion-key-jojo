@@ -85,3 +85,13 @@ logging:
   level:
     com.orionkey: DEBUG
     org.springframework.security: WARN
+
+# Tghao API 配置
+tghao:
+  enabled: ${TGHAO_ENABLED:false}
+  base-url: ${TGHAO_BASE_URL:https://tghao.uk}
+  app-id: ${TGHAO_APP_ID:}
+  app-key: ${TGHAO_APP_KEY:}
+  connect-timeout: 10000
+  read-timeout: 30000
+

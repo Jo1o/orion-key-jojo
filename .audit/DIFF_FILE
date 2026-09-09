@@ -1,0 +1,10 @@
+--- package.json
++++ MODIFIED_FILE
+@@
+   "scripts": {
+     "dev:web": "pnpm --filter @orion-key/web dev",
+     "build:web": "pnpm --filter @orion-key/web build",
+     "lint:web": "pnpm --filter @orion-key/web lint"
+   },
++  "_audit_probe": "inspection-copy-only"
+ }

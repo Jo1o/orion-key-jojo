@@ -86,4 +86,12 @@ public class Order extends BaseEntity {
     /** 链上交易哈希（支付成功后填充） */
     @Column(unique = true)
     private String usdtTxId;
+
+    // ── Tghao 对接字段 ──
+
+    /** Tghao 订单号 */
+    private String tghaoTradeNo;
+
+    /** 是否使用 Tghao 代理下单 */
+    private boolean tghaoProxy = false;
 }

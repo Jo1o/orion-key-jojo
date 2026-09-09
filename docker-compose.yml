@@ -1,110 +1,133 @@
-# ===================================================================
-# Orion Key 生产环境 Docker Compose 配置
-# ===================================================================
-#
-# 什么是 Docker Compose？
-#   一个管理多个 Docker 容器的工具。用一个 YAML 文件声明所有容器的配置，
-#   然后用一条命令统一启动、停止、查看日志。
-#
-# 核心命令（在 docker-compose.yml 所在目录执行）：
-#   docker compose pull           拉取最新镜像
-#   docker compose up -d          后台启动所有容器
-#   docker compose ps             查看容器状态
-#   docker compose logs -f        实时查看所有日志
-#   docker compose down           停止并移除所有容器
-#
-# 网络说明：
-#   Docker Compose 自动为所有 services 创建一个共享网络。
-#   容器间可以通过 service 名称互相访问（如 web 容器用 http://api:8083 访问 api 容器）。
-#   无需手动创建 docker network。
-#
-# 环境变量加载顺序：
-#   .env 文件 → docker compose 读取 → 注入到容器 → Spring Boot / Next.js 读取
-#
-# ===================================================================
+version: '3.8'
 
 services:
-
-  # ── 后端 API 容器 ──
-  api:
-    # 镜像地址（由 CI/CD 自动更新 .env 中的 API_IMAGE）
-    image: ${API_IMAGE:-ghcr.io/OWNER/orion-key-api:latest}
-
-    # 端口映射：宿主机端口:容器端口
-    # 127.0.0.1 前缀 = 仅本机可访问（外部必须经过 Nginx，不会暴露到公网）
-    ports:
-      - "127.0.0.1:8083:8083"
-
-    # 容器时区：统一使用北京时间，确保订单时间、日志时间与用户一致
-    environment:
-      - TZ=Asia/Shanghai
-
-    # 从 .env 文件加载环境变量到容器内
-    # Spring Boot 的 application.yml 用 ${DB_URL:默认值} 语法读取这些变量
-    env_file: .env
-
-    # 卷挂载：宿主机目录 ↔ 容器目录
-    # 作用：上传的文件存储在宿主机，容器删除/重建后数据不会丢失
-    volumes:
-      - ./uploads:/app/uploads
-
-    # 容器崩溃或服务器重启后自动恢复（除非手动 docker compose stop）
+  # PostgreSQL 数据库
+  postgres:
+    image: postgres:18-alpine
+    container_name: orion-postgres
     restart: unless-stopped
-
-  # ── 前端 Web 容器 ──
-  web:
-    image: ${WEB_IMAGE:-ghcr.io/OWNER/orion-key-web:latest}
-
-    ports:
-      - "127.0.0.1:3000:3000"
-
-    # 环境变量
-    # TZ: 容器时区统一北京时间
-    # BACKEND_URL: Next.js SSR 调用后端时使用（"api" 是后端 service 名，Docker 网络内互通）
     environment:
-      - TZ=Asia/Shanghai
-      - BACKEND_URL=http://api:8083
+      POSTGRES_DB: db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-your_secure_password_here}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./apps/api/src/main/resources/data.sql:/docker-entrypoint-initdb.d/01-data.sql
+      - ./apps/api/src/main/resources/tghao_migration.sql:/docker-entrypoint-initdb.d/02-tghao.sql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
-    # 依赖声明：确保 api 容器先启动
+  # 后端 API
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: orion-api
+    restart: unless-stopped
+    environment:
+      # 数据库配置
+      DB_URL: jdbc:postgresql://postgres:5432/db
+      DB_USERNAME: postgres
+      DB_PASSWORD: ${DB_PASSWORD:-your_secure_password_here}
+
+      # JWT 配置
+      JWT_SECRET: ${JWT_SECRET:-orion-key-production-secret-key-must-be-at-least-256-bits-long-change-this}
+
+      # 密码模式（生产环境使用 BCrypt）
+      PASSWORD_PLAIN: "false"
+
+      # 上传配置
+      UPLOAD_PATH: /app/uploads
+      UPLOAD_URL_PREFIX: /api/uploads
+
+      # 邮件配置
+      MAIL_ENABLED: ${MAIL_ENABLED:-false}
+      MAIL_HOST: ${MAIL_HOST:-smtp.example.com}
+      MAIL_PORT: ${MAIL_PORT:-465}
+      MAIL_USERNAME: ${MAIL_USERNAME:-noreply@jojobuy.top}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      MAIL_SITE_URL: https://jojobuy.top
+
+      # Tghao 配置
+      TGHAO_ENABLED: ${TGHAO_ENABLED:-true}
+      TGHAO_BASE_URL: ${TGHAO_BASE_URL:-https://tghao.uk}
+      TGHAO_APP_ID: ${TGHAO_APP_ID:-}
+      TGHAO_APP_KEY: ${TGHAO_APP_KEY:-}
+
+      # 受信代理（Nginx）
+      RATE_LIMIT_TRUSTED_PROXIES: "127.0.0.1,::1,172.16.0.0/12,10.0.0.0/8"
+
+      # Turnstile (Cloudflare 人机验证)
+      TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY:-}
+      TURNSTILE_SITE_KEY: ${TURNSTILE_SITE_KEY:-}
+    volumes:
+      - upload_data:/app/uploads
+    ports:
+      - "8083:8083"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8083/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # 前端 Web
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    container_name: orion-web
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: https://jojobuy.top/api
+    ports:
+      - "3000:3000"
     depends_on:
       - api
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
+  # Nginx 反向代理
+  nginx:
+    image: nginx:alpine
+    container_name: orion-nginx
     restart: unless-stopped
-
-  # ── BEpusdt USDT 支付微服务 ──
-  # 开源自托管 USDT 收款网关，支持 TRC20/BEP20 等多链
-  # 管理后台：http://server:8881（首次部署后配置钱包地址、支付精度等）
-  # 文档参考：docs/USDT_PAYMENT_DESIGN.md 第七章
-  bepusdt:
-    image: v03413/bepusdt:latest
-    container_name: bepusdt
-
-    # 端口映射：仅本机可访问，由 api 容器通过 Docker 网络调用
     ports:
-      - "127.0.0.1:8881:8080"
-
-    # 数据持久化：SQLite 数据库、钱包配置等存储在 volume 中
+      - "80:80"
+      - "443:443"
     volumes:
-      - bepusdt_data:/var/lib/bepusdt
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - nginx_cache:/var/cache/nginx
+    depends_on:
+      - web
+      - api
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
-    # BEpusdt 环境变量（敏感值应写入 .env 文件）
-    # LOG: 日志输出目录（BEpusdt 会在此目录下生成 bepusdt.log 和 task.log）
-    # APP_URI: BEpusdt 外部可访问地址（用于回调签名验证，若使用 Nginx 反代则填反代地址）
-    # AUTH_TOKEN: 管理后台登录密码
-    # API_TOKEN: API 接口签名密钥（后端 PaymentChannel 配置中的 api_token 需与此一致）
-    # TRADE_IS_NOTIFY: 1=开启支付回调通知（必须开启）
-    # EXPIRE_TIME: 支付订单过期时间（秒），默认 900 = 15 分钟
-    environment:
-      - TZ=Asia/Shanghai
-      - LOG=/var/lib/bepusdt/logs
-      - APP_URI=${BEPUSDT_APP_URI:-http://localhost:8881}
-      - AUTH_TOKEN=${BEPUSDT_AUTH_TOKEN:-change-me}
-      - API_TOKEN=${BEPUSDT_API_TOKEN:-change-me}
-      - TRADE_IS_NOTIFY=1
-      - EXPIRE_TIME=${BEPUSDT_EXPIRE_TIME:-900}
-
-    restart: unless-stopped
-
-# ── 命名卷（数据持久化） ──
 volumes:
-  bepusdt_data:
+  postgres_data:
+    driver: local
+  upload_data:
+    driver: local
+  nginx_cache:
+    driver: local
+
+networks:
+  default:
+    name: orion-network

@@ -1,0 +1,37 @@
+# ================================
+# Docker 后端服务
+# ================================
+FROM eclipse-temurin:22-jdk-alpine AS builder
+
+# 设置工作目录
+WORKDIR /app
+
+# 复制 Maven 配置和源码
+COPY apps/api/pom.xml .
+COPY apps/api/src ./src
+
+# 安装 Maven
+RUN apk add --no-cache maven
+
+# 构建项目（跳过测试）
+RUN mvn clean package -DskipTests
+
+# ================================
+# 运行时镜像
+# ================================
+FROM eclipse-temurin:22-jre-alpine
+
+# 设置工作目录
+WORKDIR /app
+
+# 复制构建好的 jar
+COPY --from=builder /app/target/*.jar app.jar
+
+# 创建上传目录
+RUN mkdir -p /app/uploads
+
+# 暴露端口
+EXPOSE 8083
+
+# 启动应用
+ENTRYPOINT ["java", "-jar", "app.jar"]

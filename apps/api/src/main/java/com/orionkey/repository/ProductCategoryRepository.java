@@ -4,6 +4,7 @@ import com.orionkey.entity.ProductCategory;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 public interface ProductCategoryRepository extends JpaRepository<ProductCategory, UUID> {
@@ -13,4 +14,6 @@ public interface ProductCategoryRepository extends JpaRepository<ProductCategory
     boolean existsByNameAndIsDeleted(String name, int isDeleted);
 
     boolean existsByNameAndIdNotAndIsDeleted(String name, UUID id, int isDeleted);
+
+    Optional<ProductCategory> findByName(String name);
 }

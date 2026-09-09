@@ -1,0 +1,22 @@
+# Tghao 配置说明
+# 请按以下步骤操作：
+
+# 1. 登录 Tghao 获取凭证
+#    访问：https://tghao.uk/user/index/api
+#    获取：app_id 和 app_key
+
+# 2. 编辑重启脚本
+#    打开文件：D:\workspace\orion-key-jojo\restart-backend.ps1
+#    修改以下内容：
+
+$env:TGHAO_ENABLED = "true"                    # 改为 true
+$env:TGHAO_APP_ID = "填写你的app_id"           # 填写实际值
+$env:TGHAO_APP_KEY = "填写你的app_key"         # 填写实际值
+
+# 3. 重启后端
+#    执行：.\restart-backend.ps1
+
+# 示例：
+# $env:TGHAO_ENABLED = "true"
+# $env:TGHAO_APP_ID = "12345"
+# $env:TGHAO_APP_KEY = "abcdef123456"
