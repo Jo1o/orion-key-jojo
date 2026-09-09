@@ -60,9 +60,9 @@ public class TghaoSyncServiceImpl implements TghaoSyncService {
             product.setTitle((String) tghaoProduct.get("name"));
             product.setDescription((String) tghaoProduct.get("description"));
 
-            // 价格处理：Tghao 的 user_price 作为成本价，加价 20% 作为售价
+            // 价格处理：Tghao 的 user_price 作为成本价，加价 200% 作为售价
             BigDecimal tghaoPrice = new BigDecimal(tghaoProduct.get("user_price").toString());
-            BigDecimal markup = new BigDecimal("1.2"); // 加价 20%
+            BigDecimal markup = new BigDecimal("3.0"); // 加价 200%
             product.setBasePrice(tghaoPrice.multiply(markup));
 
             // 设置分类
@@ -298,7 +298,7 @@ public class TghaoSyncServiceImpl implements TghaoSyncService {
                     Product product = productRepository.findById(mapping.getProductId()).orElse(null);
                     if (product != null) {
                         BigDecimal tghaoPrice = new BigDecimal(tghaoProduct.get("user_price").toString());
-                        BigDecimal markup = new BigDecimal("1.2"); // 加价 20%
+                        BigDecimal markup = new BigDecimal("3.0"); // 加价 200%
                         product.setBasePrice(tghaoPrice.multiply(markup));
                         productRepository.save(product);
                         updateCount++;
