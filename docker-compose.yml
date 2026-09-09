@@ -86,6 +86,7 @@ services:
     restart: unless-stopped
     environment:
       NEXT_PUBLIC_API_URL: https://jojobuy.top/api
+      BACKEND_URL: http://api:8083
     ports:
       - "3000:3000"
     depends_on:
