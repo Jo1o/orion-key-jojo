@@ -9,6 +9,8 @@ process.emitWarning = function (warning, ...args) {
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'standalone',   // Docker 部署必须：生成独立运行的 server.js，不依赖完整 node_modules
+  // monorepo 必须：让 standalone 输出追溯到项目根目录，确保 server.js 结构正确
+  outputFileTracingRoot: new URL('.', import.meta.url).pathname,
   typescript: {
     ignoreBuildErrors: true,
   },

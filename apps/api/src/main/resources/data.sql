@@ -257,5 +257,3 @@ INSERT INTO card_keys (id, product_id, content, status, created_at, updated_at)
 SELECT gen_random_uuid(), 'b0000000-0000-0000-0000-000000000006'::uuid, 'SPOTIFY-TEST-' || i, 'AVAILABLE', NOW(), NOW()
 FROM generate_series(1, 3) AS i
 WHERE NOT EXISTS (SELECT 1 FROM card_keys WHERE content = 'SPOTIFY-TEST-1' AND product_id = 'b0000000-0000-0000-0000-000000000006'::uuid);
-
-commit;
