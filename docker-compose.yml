@@ -13,8 +13,6 @@ services:
       POSTGRES_INITDB_ARGS: "--encoding=UTF8"
     volumes:
       - postgres_data:/var/lib/postgresql
-      - ./apps/api/src/main/resources/data.sql:/docker-entrypoint-initdb.d/01-data.sql
-      - ./apps/api/src/main/resources/tghao_migration.sql:/docker-entrypoint-initdb.d/02-tghao.sql
     ports:
       - "5432:5432"
     healthcheck:

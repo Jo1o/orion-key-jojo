@@ -23,11 +23,17 @@ spring:
   jpa:
     hibernate:
       ddl-auto: update
+    defer-datasource-initialization: true  # 让 data.sql 在 Hibernate 建表后执行
     open-in-view: false
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: false
+  sql:
+    init:
+      mode: always  # 始终执行初始化脚本（脚本内带 WHERE NOT EXISTS，幂等安全）
+      data-locations: classpath:tghao_migration.sql,classpath:data.sql
+      continue-on-error: false
   jackson:
     property-naming-strategy: SNAKE_CASE
     date-format: yyyy-MM-dd HH:mm:ss
